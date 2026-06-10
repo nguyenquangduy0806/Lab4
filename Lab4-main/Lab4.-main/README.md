@@ -1,307 +1,436 @@
-# LAB 4: Forecasting & Predictive Analytics cho dữ liệu IoT
+# LAB 4: FORECASTING & PREDICTIVE ANALYTICS CHO DỮ LIỆU IOT
 
-## 1. Lab này khác Lab 3 ở đâu?
+### Hệ thống dự báo và phân tích xu hướng dữ liệu IoT
 
-- **Lab 3 = Event Pipeline**: hỏi *hệ thống có đang bất thường không?* Output chính là `anomaly_score`, `severity`, `anomaly_event_log.csv`, API `/detect-anomaly`.
-- **Lab 4 = Forecasting Pipeline**: hỏi *giá trị sắp tới có thể là bao nhiêu và rủi ro vận hành là gì?* Output chính là `predicted_value`, `forecast_error`, `risk_level`, `recommendation`, `forecast_log.csv`, API `/forecast`.
+---
 
-Luồng chính của project:
+## 1. Giới thiệu
+
+Đề tài xây dựng hệ thống AIoT giúp:
+
+* Thu thập và phân tích dữ liệu cảm biến IoT.
+* Dự báo giá trị dữ liệu trong tương lai bằng Machine Learning.
+* Đánh giá mức độ rủi ro vận hành.
+* Sinh cảnh báo và khuyến nghị tự động.
+* Deploy mô hình dự báo bằng FastAPI.
+
+---
+
+## Pipeline hệ thống
 
 ```text
-UCI Appliances telemetry
-→ time-series feature engineering
-→ lag / rolling features
-→ chronological train/test split
-→ baseline forecasting
-→ machine-learning forecasting
-→ advanced boosting model demo
-→ forecast_value
-→ risk_level
-→ recommendation
-→ forecast_log.csv
-→ API /forecast
+Raw Telemetry Data
+   ↓
+Data Cleaning
+   ↓
+Time-Series Feature Engineering
+   ↓
+Lag & Rolling Features
+   ↓
+Train Forecast Model
+   ↓
+Forecast Prediction
+   ↓
+Risk Evaluation
+   ↓
+Recommendation Generation
+   ↓
+Forecast Log
+   ↓
+FastAPI Deployment
 ```
 
-## 2. Dataset
+---
 
-Bài mẫu dùng **UCI Appliances Energy Prediction**.
-
-- Dataset page: https://archive.ics.uci.edu/dataset/374/appliances+energy+prediction
-- Target chính: `Appliances`, năng lượng tiêu thụ của thiết bị gia dụng theo Wh.
-- Chu kỳ đo: 10 phút/lần.
-- Schema có timestamp, năng lượng, đèn, nhiệt độ/độ ẩm các phòng và dữ liệu thời tiết.
-
-Nếu máy có Internet, chạy `python src/download_data.py` để tải file UCI `energydata_complete.csv`.
-Nếu không có Internet, project dùng `data/sample_energydata_complete.csv` để sinh viên vẫn chạy được toàn bộ pipeline. File sample này chỉ dùng cho kiểm thử lớp học, không phải dữ liệu UCI gốc.
-
-## 3. Cấu trúc project
+## Cấu trúc project
 
 ```text
 lab4_aiot_forecasting_predictive_analytics_uci_appliances/
-├─ data/
-│  └─ sample_energydata_complete.csv        # fallback để chạy offline
-├─ notebooks/
-│  └─ 01_forecasting_predictive_analytics.ipynb
-├─ src/
-│  ├─ download_data.py                      # tải UCI dataset hoặc dùng fallback
-│  ├─ train_forecast.py                     # train baseline + ML + advanced model
-│  ├─ plot_results.py                       # vẽ forecast vs actual và metric chart
-│  ├─ app.py                                # FastAPI deploy endpoint /forecast
-│  ├─ test_api.py                           # test API khi uvicorn đang chạy
-│  ├─ test_api_local.py                     # test logic API không cần mở port
-│  └─ utils.py                              # hàm dùng chung
-├─ models/                                  # model bundle .joblib
-├─ outputs/                                 # metrics, prediction, forecast_log, api_test_result
-├─ figures/                                 # biểu đồ kết quả
-├─ diagrams/                                # hình minh họa pipeline
-└─ requirements.txt
+│
+├── data/
+│   └── sample_energydata_complete.csv
+│
+├── notebooks/
+│   └── 01_forecasting_predictive_analytics.ipynb
+│
+├── src/
+│   ├── download_data.py
+│   ├── train_forecast.py
+│   ├── plot_results.py
+│   ├── app.py
+│   ├── test_api.py
+│   ├── test_api_local.py
+│   └── utils.py
+│
+├── models/
+│
+├── outputs/
+│
+├── figures/
+│
+├── diagrams/
+│
+└── requirements.txt
 ```
 
-## 4. Cài môi trường
+---
 
-```bash
-cd lab4_aiot_forecasting_predictive_analytics_uci_appliances
-python -m venv .venv
+## 2. Dataset
+
+### File dữ liệu chính
+
+```text
+data/energydata_complete.csv
 ```
 
-Windows:
+### Các trường dữ liệu
 
-```bash
-.venv\Scripts\activate
+* Date
+* Appliances
+* Lights
+* Temperature
+* Humidity
+* Weather Variables
+* Indoor Environment Data
+
+### Nguồn dữ liệu
+
+Bộ dữ liệu sử dụng trong bài thực hành là UCI Appliances Energy Prediction Dataset, ghi nhận mức tiêu thụ điện năng và các thông số môi trường trong nhà theo chu kỳ 10 phút.
+
+---
+
+## 3. Xử lý dữ liệu
+
+Hệ thống thực hiện:
+
+* Loại bỏ dữ liệu thiếu và dữ liệu không hợp lệ.
+* Chuẩn hóa dữ liệu thời gian.
+* Xây dựng đặc trưng chuỗi thời gian.
+* Tạo Lag Features.
+* Tính Rolling Mean.
+* Tính Rolling Standard Deviation.
+* Chuẩn bị dữ liệu đầu vào cho mô hình dự báo.
+
+### Output sinh ra
+
+```text
+outputs/feature_dataset.csv
+outputs/forecast_dataset.csv
 ```
 
-macOS/Linux:
+---
 
-```bash
-source .venv/bin/activate
+## 4. AI Model
+
+### Model sử dụng
+
+```text
+Baseline Forecasting
+Machine Learning Regression
+Advanced Boosting Model
 ```
 
-Cài thư viện:
+### Train/Test Split
 
-```bash
-pip install -r requirements.txt
-```
+* 75% Train
+* 25% Test
 
-## 5. Chạy bài mẫu bằng script
-
-Tải dataset public hoặc dùng fallback sample:
-
-```bash
-python src/download_data.py
-```
-
-Train, test, đánh giá model:
-
-```bash
-python src/train_forecast.py
-```
-
-Vẽ biểu đồ:
-
-```bash
-python src/plot_results.py
-```
-
-Test API logic không cần mở port:
-
-```bash
-python src/test_api_local.py
-```
-
-Kết quả cần thấy:
+### Output model
 
 ```text
 models/forecast_model_bundle_v1.joblib
+```
+
+### File đánh giá
+
+```text
 outputs/forecast_metrics.json
-outputs/forecast_test_predictions.csv
-outputs/forecast_log.csv
-outputs/api_test_result.json
-figures/forecast_vs_actual.png
-figures/forecast_error_over_time.png
-figures/model_comparison_mae.png
 ```
 
-## 6. Chạy notebook
+---
 
-```bash
-jupyter notebook notebooks/01_forecasting_predictive_analytics.ipynb
-```
+## 5. Forecasting Analytics
 
-Chạy từng cell từ trên xuống. Sau mỗi phần, đọc kỹ câu hỏi phân tích.
+Hệ thống sử dụng:
 
-## 7. Deploy model bằng FastAPI
+* Time Series Forecasting
+* Regression Prediction
+* Forecast Error Analysis
+* Risk Classification
 
-Sau khi train model xong:
+### Mục đích
+
+* Dự báo mức tiêu thụ điện năng.
+* Phân tích xu hướng dữ liệu IoT.
+* Đánh giá rủi ro vận hành.
+* Hỗ trợ ra quyết định cho hệ thống.
+
+---
+
+## 6. FastAPI Deployment
+
+### Chạy API
 
 ```bash
 uvicorn src.app:app --reload
 ```
 
-Mở trình duyệt:
+### Swagger Docs
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-Test API bằng script ở terminal khác:
+### API Endpoints
 
-```bash
-python src/test_api.py
+| Endpoint      | Chức năng                |
+| ------------- | ------------------------ |
+| `/health`     | Kiểm tra API             |
+| `/model-info` | Thông tin mô hình        |
+| `/forecast`   | Dự báo dữ liệu tương lai |
+
+---
+
+## 7. Output Files
+
+```text
+outputs/
+├── forecast_metrics.json
+├── forecast_test_predictions.csv
+├── forecast_log.csv
+└── api_test_result.json
+
+models/
+└── forecast_model_bundle_v1.joblib
+
+figures/
+├── forecast_vs_actual.png
+├── forecast_error_over_time.png
+└── model_comparison_mae.png
 ```
 
-Nếu máy không mở được local port, test logic API bằng:
+---
 
-```bash
-python src/test_api_local.py
+## 8. Decision Rule
+
+### Rule 1
+
+```text
+forecast_error < 20
 ```
 
-## 8. Kiểm tra hoàn thành
+→ LOW_RISK
 
-Bạn hoàn thành bài mẫu khi có đủ:
+---
 
-- Notebook chạy hết không lỗi.
-- Có `forecast_metrics.json` và đọc được MAE/RMSE/MAPE.
-- Có `forecast_log.csv` với `actual_value`, `predicted_value`, `forecast_error`, `risk_level`, `recommendation`.
-- Có ít nhất 3 biểu đồ trong `figures/`.
-- API `/health` trả `model_loaded: true`.
-- API `/forecast` trả `predicted_value`, `risk_level`, `recommendation`, `safety_note`.
-- Bạn giải thích được vì sao Lab 4 không dùng Precision/Recall/F1 như Lab 3.
-- Bạn giải thích được vì sao dự báo cao chưa được phép tự động cắt/bật thiết bị.
+### Rule 2
 
-## 8.1. Kết quả huấn luyện mô hình dự báo
+```text
+20 ≤ forecast_error < 50
+```
 
-Sau khi thực hiện các bước tiền xử lý dữ liệu, xây dựng đặc trưng thời gian (Time Series Feature Engineering) và huấn luyện mô hình, hệ thống đã tạo thành công file mô hình:
+→ MEDIUM_RISK
 
-```bash
+---
+
+### Rule 3
+
+```text
+forecast_error ≥ 50
+```
+
+→ HIGH_RISK
+
+---
+
+## 9. Kết quả đạt được
+
+Hệ thống đã:
+
+* Xây dựng pipeline Forecasting hoàn chỉnh cho dữ liệu IoT.
+* Huấn luyện thành công mô hình dự báo.
+* Đánh giá mô hình bằng MAE, RMSE và MAPE.
+* Sinh forecast log và recommendation log.
+* Triển khai API bằng FastAPI.
+* Hỗ trợ dự báo và đánh giá rủi ro vận hành.
+
+---
+
+## 10. Kết quả huấn luyện mô hình
+
+Sau khi thực hiện quá trình tiền xử lý dữ liệu và xây dựng đặc trưng chuỗi thời gian, hệ thống đã tạo thành công mô hình:
+
+```text
 models/forecast_model_bundle_v1.joblib
 ```
 
-Mô hình có khả năng dự báo mức tiêu thụ điện năng của thiết bị gia dụng trong khoảng thời gian tiếp theo dựa trên dữ liệu lịch sử.
+Mô hình sử dụng các đặc trưng:
 
 ```text
-Các đặc trưng sử dụng
-Giá trị tiêu thụ điện hiện tại
-Giá trị tiêu thụ điện ở các thời điểm trước (Lag Features)
+Giá trị tiêu thụ hiện tại
+Lag Features
 Rolling Mean
 Rolling Standard Deviation
-Các thông tin nhiệt độ
+Nhiệt độ môi trường
 Độ ẩm môi trường
 Thông tin thời gian
 ```
 
-## 8.2. Kết quả đánh giá mô hình
+---
+
+## 11. Kết quả đánh giá mô hình
 
 Hệ thống sinh file:
 
-```bash
+```text
 outputs/forecast_metrics.json
 ```
 
-MAE càng nhỏ càng tốt.
-Dễ diễn giải trực quan.
-RMSE (Root Mean Squared Error)
+Các chỉ số đánh giá:
 
-## 8.3. Kết quả dự báo
+* MAE (Mean Absolute Error)
+* RMSE (Root Mean Squared Error)
+* MAPE (Mean Absolute Percentage Error)
+
+### Ý nghĩa
+
+* MAE càng nhỏ thì mô hình càng chính xác.
+* RMSE phản ánh mức độ sai số lớn.
+* MAPE cho biết tỷ lệ sai số theo phần trăm.
+
+---
+
+## 12. Kết quả dự báo
 
 Hệ thống tạo file:
 
-```bash
+```text
 outputs/forecast_test_predictions.csv
 ```
 
 Ví dụ:
 
+```text
+Actual Value    Predicted Value    Error
+120             118                2
+135             130                5
+110             113                3
+145             140                5
+160             158                2
 ```
-Actual Value	Predicted Value	Error
-120	118	2
-135	130	5
-110	113	3
-145	140	5
-160	158	2
-```
 
-### Nhận xét:
+### Nhận xét
 
-Giá trị dự báo bám sát giá trị thực tế.
-Sai số dao động nhỏ.
-Mô hình có khả năng học được xu hướng tiêu thụ điện năng.
+* Giá trị dự báo gần với giá trị thực tế.
+* Sai số dự báo thấp.
+* Mô hình học được xu hướng tiêu thụ điện năng theo thời gian.
 
-## 8.4. Kết quả ghi log dự báo
+---
+
+## 13. Kết quả ghi log dự báo
 
 File:
 
+```text
 outputs/forecast_log.csv
+```
 
 Bao gồm:
 
 ```text
-actual_value	predicted_value	forecast_error	risk_level	recommendation
-120	118	2	Low	Continue Monitoring
-200	240	40	Medium	Check Equipment
-300	380	80	High	Immediate Inspection
+actual_value predicted_value forecast_error risk_level recommendation
+120 118 2 Low Continue Monitoring
+200 240 40 Medium Check Equipment
+300 380 80 High Immediate Inspection
 ```
 
 ### Ý nghĩa
 
-```
+```text
 Low Risk
 Hệ thống hoạt động bình thường.
 Không cần hành động đặc biệt.
+
 Medium Risk
 Xuất hiện dấu hiệu tiêu thụ điện bất thường.
 Cần kiểm tra thiết bị.
+
 High Risk
 Dự báo mức tiêu thụ tăng mạnh.
 Có nguy cơ mất ổn định hệ thống.
 Cần kiểm tra ngay.
 ```
 
-## 8.5 KẾT QUẢ TRIỂN KHAI API
+---
 
-Endpoint Health Check
+## 14. Kết quả triển khai API
 
-```
+### Endpoint Health Check
+
+```text
 API:
 
 GET /health
+```
 
 Kết quả:
 
+```json
 {
-    "status": "ok",
-    "model_loaded": true
+  "status": "ok",
+  "model_loaded": true
 }
+```
 
 Ý nghĩa:
 
+```text
 Server hoạt động bình thường.
 Model được load thành công.
+```
 
-Endpoint Forecast
+---
 
+### Endpoint Forecast
+
+```text
 API:
 
 POST /forecast
+```
 
 Ví dụ kết quả:
 
+```json
 {
-    "predicted_value": 245.6,
-    "risk_level": "Medium",
-    "recommendation": "Check Equipment",
-    "safety_note": "Human verification required"
+  "predicted_value": 245.6,
+  "risk_level": "Medium",
+  "recommendation": "Check Equipment",
+  "safety_note": "Human verification required"
 }
 ```
+
+Ý nghĩa:
+
+```text
+Trả về giá trị dự báo.
+Đánh giá mức độ rủi ro.
+Đưa ra khuyến nghị phù hợp.
+Yêu cầu xác nhận của người vận hành trước khi thực hiện hành động.
+```
+
+---
 
 ## KẾT LUẬN
 
 Lab 4 đã xây dựng thành công hệ thống Forecasting & Predictive Analytics cho dữ liệu IoT. Hệ thống có khả năng:
 
-Thu thập dữ liệu cảm biến.
-Tạo đặc trưng chuỗi thời gian.
-Huấn luyện mô hình dự báo.
-Đánh giá bằng MAE, RMSE, MAPE.
-Sinh cảnh báo rủi ro.
-Đề xuất hành động vận hành.
-Triển khai thành công bằng FastAPI.
-Hỗ trợ ra quyết định trong các hệ thống AIoT thực tế như kho lạnh, nhà máy thông minh, tòa nhà thông minh và quản lý năng lượng.
+* Thu thập dữ liệu cảm biến.
+* Xây dựng đặc trưng chuỗi thời gian.
+* Huấn luyện mô hình dự báo.
+* Đánh giá bằng MAE, RMSE và MAPE.
+* Sinh cảnh báo rủi ro.
+* Đề xuất hành động vận hành.
+* Triển khai thành công bằng FastAPI.
+
+Hệ thống có thể được áp dụng trong các bài toán thực tế như quản lý năng lượng, nhà thông minh, nhà máy thông minh, kho lạnh thông minh và các hệ thống AIoT quy mô lớn.
